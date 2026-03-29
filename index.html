@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rundown QC Checker — CTTV</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f; --surface: #181818; --surface2: #202020;
+    --border: #2a2a2a; --border2: #333; --text: #e8e8e8;
+    --text2: #888; --text3: #555; --accent: #c8f135; --accent-dim: #a0c020;
+    --pass: #4ade80; --pass-bg: #0d2a1a; --pass-border: #1a4a2a;
+    --fail: #f87171; --fail-bg: #2a0d0d; --fail-border: #4a1a1a;
+    --warn: #fbbf24; --warn-bg: #2a1f0d; --warn-border: #4a3510;
+    --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; display: flex; flex-direction: column; }
+
+  header { border-bottom: 1px solid var(--border); padding: 1.25rem 2rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .logo { font-family: var(--mono); font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: var(--accent); text-transform: uppercase; }
+  .logo span { color: var(--text2); font-weight: 400; }
+
+  .api-row { display: flex; align-items: center; gap: 8px; }
+  .api-row label { font-family: var(--mono); font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+  .api-row input { font-family: var(--mono); font-size: 12px; background: var(--surface); border: 1px solid var(--border2); color: var(--text); border-radius: 4px; padding: 6px 10px; width: 300px; outline: none; transition: border-color 0.15s; }
+  .api-row input:focus { border-color: var(--accent-dim); }
+  .save-key-btn { font-family: var(--mono); font-size: 11px; background: none; border: 1px solid var(--border2); color: var(--text3); border-radius: 4px; padding: 6px 10px; cursor: pointer; white-space: nowrap; transition: color 0.15s, border-color 0.15s; }
+  .save-key-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+
+  .main { flex: 1; display: grid; grid-template-columns: 1fr 1fr; height: calc(100vh - 62px); }
+  .left-panel { border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 1.5rem; gap: 1rem; overflow-y: auto; }
+  .right-panel { display: flex; flex-direction: column; padding: 1.5rem; gap: 1rem; overflow-y: auto; }
+  .panel-label { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text3); margin-bottom: 2px; }
+
+  .drop-zone { flex: 1; min-height: 220px; border: 1.5px dashed var(--border2); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; cursor: pointer; transition: border-color 0.15s, background 0.15s; position: relative; background: var(--surface); }
+  .drop-zone:hover, .drop-zone.drag { border-color: var(--accent-dim); background: #1a1f0a; }
+  .drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon { width: 40px; height: 40px; border: 1.5px solid var(--border2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text3); pointer-events: none; }
+  .drop-text { font-size: 13px; color: var(--text2); text-align: center; line-height: 1.8; pointer-events: none; }
+  .drop-text strong { color: var(--accent); font-weight: 500; }
+
+  .preview-container { position: relative; flex: 1; min-height: 220px; display: none; }
+  .preview-container img { width: 100%; height: 100%; object-fit: contain; border-radius: 6px; border: 1px solid var(--border); display: block; background: var(--surface); }
+  .remove-btn { position: absolute; top: 8px; right: 8px; background: var(--bg); border: 1px solid var(--border2); color: var(--text2); font-family: var(--mono); font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+  .remove-btn:hover { color: var(--fail); border-color: var(--fail-border); }
+
+  .check-btn { font-family: var(--mono); font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; background: var(--accent); color: #0f0f0f; border: none; border-radius: 6px; padding: 12px 20px; cursor: pointer; width: 100%; transition: background 0.15s, opacity 0.15s; }
+  .check-btn:hover:not(:disabled) { background: #d8ff45; }
+  .check-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .toggle-rules { font-family: var(--mono); font-size: 10px; color: var(--text3); background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0; text-transform: uppercase; letter-spacing: 0.06em; }
+  .toggle-rules:hover { color: var(--text2); }
+  .rules-list { display: none; flex-direction: column; gap: 6px; }
+  .rule-badge { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 5px; background: var(--surface); border: 1px solid var(--border); font-size: 12px; line-height: 1.5; }
+  .rule-num { font-family: var(--mono); font-size: 10px; color: var(--text3); min-width: 22px; padding-top: 1px; }
+  .rule-text { color: var(--text2); }
+  .rule-text strong { color: var(--text); font-weight: 500; }
+
+  .summary-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill { font-family: var(--mono); font-size: 11px; padding: 3px 10px; border-radius: 999px; border: 1px solid; font-weight: 500; }
+  .pill.pass { color: var(--pass); border-color: var(--pass-border); background: var(--pass-bg); }
+  .pill.fail { color: var(--fail); border-color: var(--fail-border); background: var(--fail-bg); }
+  .pill.warn { color: var(--warn); border-color: var(--warn-border); background: var(--warn-bg); }
+
+  .results-list { display: flex; flex-direction: column; gap: 6px; }
+  .result-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 6px; border: 1px solid; font-size: 12px; line-height: 1.6; animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .result-item.pass { background: var(--pass-bg); border-color: var(--pass-border); }
+  .result-item.fail { background: var(--fail-bg); border-color: var(--fail-border); }
+  .result-item.warn { background: var(--warn-bg); border-color: var(--warn-border); }
+  .result-status { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.06em; min-width: 36px; padding-top: 1px; }
+  .pass .result-status { color: var(--pass); } .fail .result-status { color: var(--fail); } .warn .result-status { color: var(--warn); }
+  .result-body { flex: 1; }
+  .result-note { color: var(--text); margin-bottom: 2px; }
+  .result-rule-name { color: var(--text3); font-family: var(--mono); font-size: 10px; }
+
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 8px; color: var(--text3); font-size: 13px; text-align: center; padding: 2rem; border: 1px dashed var(--border); border-radius: 8px; min-height: 200px; }
+  .loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 12px; min-height: 200px; }
+  .spinner { width: 24px; height: 24px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-family: var(--mono); font-size: 12px; color: var(--text3); }
+  .error-box { background: var(--fail-bg); border: 1px solid var(--fail-border); border-radius: 6px; padding: 12px 14px; font-family: var(--mono); font-size: 12px; color: var(--fail); line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+
+  @media (max-width: 800px) {
+    .main { grid-template-columns: 1fr; height: auto; }
+    .left-panel { border-right: none; border-bottom: 1px solid var(--border); }
+    .api-row input { width: 160px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">CTTV <span>/ Rundown QC</span></div>
+  <div class="api-row">
+    <label>API Key</label>
+    <input type="password" id="apiKey" placeholder="sk-ant-api03-..." autocomplete="off">
+    <button class="save-key-btn" onclick="saveKey()">Save in browser</button>
+  </div>
+</header>
+
+<div class="main">
+  <div class="left-panel">
+    <div><div class="panel-label">Screenshot</div></div>
+
+    <div class="drop-zone" id="dropzone">
+      <input type="file" id="fileInput" accept="image/*">
+      <div class="drop-icon">+</div>
+      <div class="drop-text">
+        Drop screenshot here<br>
+        or <strong>click to browse</strong><br>
+        <span style="font-size:11px;color:var(--text3);">Also supports Ctrl+V / Cmd+V paste</span>
+      </div>
+    </div>
+
+    <div class="preview-container" id="previewContainer">
+      <img id="preview" src="" alt="Rundown screenshot">
+      <button class="remove-btn" onclick="clearImage()">Remove</button>
+    </div>
+
+    <button class="check-btn" id="checkBtn" onclick="runCheck()" disabled>Run QC check</button>
+
+    <button class="toggle-rules" onclick="toggleRules()">Show / hide rules</button>
+    <div class="rules-list" id="rulesList"></div>
+  </div>
+
+  <div class="right-panel">
+    <div><div class="panel-label">Results</div></div>
+    <div id="resultsArea">
+      <div class="empty-state">Upload a screenshot and run the check to see results here.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const RULES = [
+  { id: 1,  label: "Hourly Network ID",                  desc: "Every hour starts exactly on the hour (01:00:00, 02:00:00, etc.) with a NETWORK ID item that is 5 seconds long and has 'Spring' in the clip name." },
+  { id: 2,  label: "No duplicate Network IDs per hour",  desc: "Within any single hour block, no two NETWORK ID clips share the same clip name." },
+  { id: 3,  label: "Menu closes each hour",              desc: "The last item in each hour block must be type MENU, format (V) GFX, with a clip name matching the pattern: GFX CHCT_MENU23_{YYMMDD}_{block}_{HH}." },
+  { id: 4,  label: "Duration equals Plan dur",           desc: "For every row, the Duration value and the Plan dur value must be identical." },
+  { id: 5,  label: "Network IDs separated by color",     desc: "No two NETWORK ID rows may appear consecutively with the same row background color — at least one differently-colored row must separate them." },
+  { id: 6,  label: "Network ID immediately before Menu", desc: "The item directly before the MENU at the end of each hour must be a NETWORK ID, with nothing in between." },
+  { id: 7,  label: "Rundown offset 0 to +5 sec",         desc: "The offset value after the brackets in the red status bar must be between 0:00 and +0:05. Negative or above +0:05 is an error." },
+  { id: 8,  label: "Max 4 consecutive promos",           desc: "No more than 4 consecutive yellow PROMO rows may appear without being interrupted by a row of a different color." },
+  { id: 9,  label: "PKG includes CHCT_LB_MAIN",          desc: "Every PKG item must have CHCT_LB_MAIN listed as one of the clips in the Clips column of that same row." },
+  { id: 10, label: "Ready column present",               desc: "A column named 'Ready' must be visible in the rundown header." },
+  { id: 11, label: "READY TO AIR badge present",         desc: "A red READY TO AIR badge must be visible in the rundown header. If absent, raise alert: TOGGLE MODE!" },
+  { id: 12, label: "Taped show MP timing",               desc: "For every TAPED SHOW item, the clip with '_MP_' in its name must have a duration exactly 2 minutes less than the total item duration." },
+  { id: 13, label: "Trailer preceded by Real Cinema ID", desc: "Every TRAILER item (blue row) must be immediately preceded by an ID_REAL_CINEMA_Trailer item — nothing between them." },
+  { id: 14, label: "? column shows R on green",          desc: "The column named '?' must display 'R' on a green background for every row." },
+  { id: 15, label: "No duplicate promos per hour",       desc: "Within each hour block, PROMO - generic and PROMO - ad(ANONS) clip names must each appear only once." },
+];
+
+let imageBase64 = null;
+let imageMimeType = 'image/png';
+let rulesVisible = false;
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const previewContainer = document.getElementById('previewContainer');
+const preview = document.getElementById('preview');
+const checkBtn = document.getElementById('checkBtn');
+const resultsArea = document.getElementById('resultsArea');
+const rulesList = document.getElementById('rulesList');
+const apiKeyInput = document.getElementById('apiKey');
+
+// Load saved key
+const savedKey = localStorage.getItem('cttv_api_key');
+if (savedKey) apiKeyInput.value = savedKey;
+
+function saveKey() {
+  const k = apiKeyInput.value.trim();
+  if (k) { localStorage.setItem('cttv_api_key', k); alert('API key saved in this browser.'); }
+}
+
+rulesList.innerHTML = RULES.map(r =>
+  `<div class="rule-badge"><span class="rule-num">${String(r.id).padStart(2,'0')}</span><span class="rule-text"><strong>${r.label}</strong> — ${r.desc}</span></div>`
+).join('');
+
+function toggleRules() {
+  rulesVisible = !rulesVisible;
+  rulesList.style.display = rulesVisible ? 'flex' : 'none';
+  if (rulesVisible) { rulesList.style.flexDirection = 'column'; rulesList.style.gap = '6px'; }
+}
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadFile(file);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+document.addEventListener('paste', e => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (const item of items) { if (item.type.startsWith('image/')) { loadFile(item.getAsFile()); break; } }
+});
+
+function loadFile(file) {
+  imageMimeType = file.type || 'image/png';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    imageBase64 = ev.target.result.split(',')[1];
+    preview.src = ev.target.result;
+    previewContainer.style.display = 'block';
+    dropzone.style.display = 'none';
+    checkBtn.disabled = false;
+    resultsArea.innerHTML = '<div class="empty-state">Click "Run QC check" to analyse this screenshot.</div>';
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearImage() {
+  imageBase64 = null;
+  previewContainer.style.display = 'none';
+  dropzone.style.display = 'flex';
+  checkBtn.disabled = true;
+  resultsArea.innerHTML = '<div class="empty-state">Upload a screenshot and run the check to see results here.</div>';
+  fileInput.value = '';
+}
+
+async function runCheck() {
+  const apiKey = apiKeyInput.value.trim();
+  if (!apiKey) { alert('Please enter your Anthropic API key first.'); return; }
+  if (!imageBase64) return;
+
+  checkBtn.disabled = true;
+  resultsArea.innerHTML = '<div class="loading-state"><div class="spinner"></div><div class="loading-text">Analysing rundown...</div></div>';
+
+  const rulesText = RULES.map(r => `Rule ${r.id} — ${r.label}: ${r.desc}`).join('\n');
+  const prompt = `You are a broadcast rundown QC checker for the Octopus scheduling system. Carefully examine every visible detail of this rundown screenshot and check it against each rule below.\n\nFor each rule respond with:\n- PASS: rule is clearly satisfied\n- FAIL: rule is clearly violated — describe exactly what is wrong\n- WARN: cannot fully verify from the screenshot — explain what you can see\n\nRules:\n${rulesText}\n\nRespond ONLY with a valid JSON array. No markdown fences, no extra text.\nFormat: [{"id":1,"status":"PASS","note":"explanation"},...]`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5-20251101',
+        max_tokens: 1500,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: imageMimeType, data: imageBase64 } },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(`API error ${res.status}: ${JSON.stringify(data.error || data)}`);
+    }
+
+    const text = (data.content || []).map(i => i.text || '').join('');
+    const clean = text.replace(/```json|```/g, '').trim();
+
+    let results;
+    try { results = JSON.parse(clean); }
+    catch(e) { throw new Error('Could not parse model response:\n' + text.slice(0, 400)); }
+
+    renderResults(results);
+  } catch (err) {
+    resultsArea.innerHTML = `<div class="error-box">Error: ${err.message}</div>`;
+  } finally {
+    checkBtn.disabled = false;
+  }
+}
+
+function renderResults(results) {
+  const passes = results.filter(r => r.status === 'PASS').length;
+  const fails  = results.filter(r => r.status === 'FAIL').length;
+  const warns  = results.filter(r => r.status === 'WARN').length;
+  const order  = ['FAIL', 'WARN', 'PASS'];
+  const sorted = [...results].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
+
+  let html = `<div class="summary-row">
+    <span class="pill fail">${fails} failed</span>
+    <span class="pill warn">${warns} warnings</span>
+    <span class="pill pass">${passes} passed</span>
+  </div><div class="results-list">`;
+
+  for (const r of sorted) {
+    const rule = RULES.find(x => x.id === r.id);
+    const cls  = r.status === 'PASS' ? 'pass' : r.status === 'FAIL' ? 'fail' : 'warn';
+    html += `<div class="result-item ${cls}">
+      <div class="result-status">${r.status}</div>
+      <div class="result-body">
+        <div class="result-note">${r.note}</div>
+        <div class="result-rule-name">Rule ${r.id}: ${rule ? rule.label : ''}</div>
+      </div>
+    </div>`;
+  }
+
+  resultsArea.innerHTML = html + '</div>';
+}
+</script>
+</body>
+</html>
